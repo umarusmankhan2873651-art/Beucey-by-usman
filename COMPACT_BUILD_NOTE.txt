@@ -1,0 +1,42 @@
+ESP-HACK BRUCEY S3 V24 - COMPACT BUILD PACKAGE
+
+This package contains the same firmware source/tools as V24 FINAL but omits
+large files that are not needed by PlatformIO to build or flash the ESP32-S3.
+
+Removed from this compact ZIP:
+- upstream_original/ duplicate reference copy
+- Windows qESPHACK/esptool executables
+- PCB/documentation/image assets under others/
+- OneWireHub PDF datasheets
+
+No src/ firmware tool was removed.
+No menu/tool source file was removed.
+No required PlatformIO build library source was removed.
+
+Use:
+  pio run -e BRUCEY_S3_SSD1306
+
+The full V24 archive can still be kept separately as the archival copy.
+
+V24.1 BUILD FIX
+- Removed a duplicated leftover TV-B-Gone send block in src/infrared.cpp.
+- Fixed compile errors:
+  'repeat' was not declared in this scope
+  expected declaration before '}' token
+- IR behavior remains:
+  Send = 1x
+  Send 3x = 3x
+  TV-B-Gone = 1x per code
+  TV-B-Gone 3x = 3x per code
+
+V24.2 BUILD SCRIPT FIX
+- Removed the dependency on a bundled esptool.exe.
+- PlatformIO already creates firmware.factory.bin for ESP32-S3.
+- build.py now copies that generated image to a versioned file in the project root.
+- This keeps the compact package small and lets a normal PlatformIO build finish successfully.
+
+V24.3 SCONS CALLBACK FIX
+- Fixed PlatformIO/SCons post-action callback signature.
+- SCons calls callbacks with keyword arguments: target=, source=, env=.
+- build.py now accepts env correctly.
+- No firmware tool/menu/hardware logic changed from V24.2.
