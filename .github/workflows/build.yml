@@ -18,7 +18,6 @@ jobs:
       - name: Install p7zip-full
         run: sudo apt-get update && sudo apt-get install -y p7zip-full
 
-      # 1. Extract and locate the project
       - name: Extract and locate source
         id: locate_source
         run: |
@@ -34,18 +33,14 @@ jobs:
           
           echo "PROJECT_DIR=$PIO_DIR" >> $GITHUB_ENV
 
-      # 2. Fix Linux Case-Sensitivity (Explorer.h)
       - name: Fix Explorer.h case sensitivity
         run: |
           cd $PROJECT_DIR
-          echo "Fixing include paths for Linux compatibility..."
           find src -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/#include "Explorer\.h"/#include "explorer.h"/g' {} +
-          
           if [ -f "src/Explorer.h" ] && [ ! -f "src/explorer.h" ]; then
             mv src/Explorer.h src/explorer.h
           fi
 
-      # 3. Expand partition table to fit the 2.05MB code
       - name: Expand partition table for larger firmware
         run: |
           cd $PROJECT_DIR
@@ -81,13 +76,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio esptool
 
-      # 4. Compile
       - name: Build firmware
         run: |
           cd $PROJECT_DIR
           pio run -e BRUCEY_S3_SSD1306
 
-      # 5. Merge into single flashable image
       - name: Create merged full-flash image
         run: |
           cd $PROJECT_DIR
@@ -100,19 +93,21 @@ jobs:
             fi
           done
 
+          # Find boot_app0.bin and save it to the GitHub environment so next steps can see it
           BOOT_APP0=$(find ~/.platformio/packages -name boot_app0.bin 2>/dev/null | head -1)
+          echo "BOOT_APP0=$BOOT_APP0" >> $GITHUB_ENV
 
-          python -m esptool --chip esp32s3 merge_bin \
-            --flash_mode dio \
-            --flash_freq 80m \
-            --flash_size 16MB \
+          # Updated to the new esptool v5 syntax (hyphens instead of underscores)
+          python -m esptool --chip esp32s3 merge-bin \
+            --flash-mode dio \
+            --flash-freq 80m \
+            --flash-size 16MB \
             0x0     "$BUILD_DIR/bootloader.bin" \
             0x8000  "$BUILD_DIR/partitions.bin" \
             0xe000  "$BOOT_APP0" \
             0x10000 "$BUILD_DIR/firmware.bin" \
             -o      "$BUILD_DIR/merged_full_flash.bin"
 
-      # 6. Collect artifacts
       - name: Collect artifacts
         run: |
           cd $PROJECT_DIR
