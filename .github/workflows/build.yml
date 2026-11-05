@@ -93,11 +93,9 @@ jobs:
             fi
           done
 
-          # Find boot_app0.bin and save it to the GitHub environment so next steps can see it
           BOOT_APP0=$(find ~/.platformio/packages -name boot_app0.bin 2>/dev/null | head -1)
           echo "BOOT_APP0=$BOOT_APP0" >> $GITHUB_ENV
 
-          # Updated to the new esptool v5 syntax (hyphens instead of underscores)
           python -m esptool --chip esp32s3 merge-bin \
             --flash-mode dio \
             --flash-freq 80m \
@@ -112,17 +110,22 @@ jobs:
         run: |
           cd $PROJECT_DIR
           BUILD_DIR=".pio/build/BRUCEY_S3_SSD1306"
-          mkdir -p ../artifacts
+          ARTIFACT_DIR="${{ github.workspace }}/artifacts"
           
-          cp "$BUILD_DIR/bootloader.bin"            ../artifacts/
-          cp "$BUILD_DIR/partitions.bin"            ../artifacts/
-          cp "$BOOT_APP0"                           ../artifacts/boot_app0.bin
-          cp "$BUILD_DIR/firmware.bin"              ../artifacts/
-          cp "$BUILD_DIR/merged_full_flash.bin"     ../artifacts/
+          mkdir -p "$ARTIFACT_DIR"
+          
+          cp "$BUILD_DIR/bootloader.bin"            "$ARTIFACT_DIR/"
+          cp "$BUILD_DIR/partitions.bin"            "$ARTIFACT_DIR/"
+          cp "$BOOT_APP0"                           "$ARTIFACT_DIR/boot_app0.bin"
+          cp "$BUILD_DIR/firmware.bin"              "$ARTIFACT_DIR/"
+          cp "$BUILD_DIR/merged_full_flash.bin"     "$ARTIFACT_DIR/"
+          
+          echo "=== Artifacts successfully collected ==="
+          ls -la "$ARTIFACT_DIR"
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ESP-HACK-BRUCEY-S3-Firmware
-          path: artifacts/
+          path: ${{ github.workspace }}/artifacts/
           if-no-files-found: error
