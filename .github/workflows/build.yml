@@ -5,29 +5,26 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
-  workflow_dispatch: # Allows manual trigger from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Download the repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Install 7-Zip to extract the archive
       - name: Install p7zip-full
         run: sudo apt-get update && sudo apt-get install -y p7zip-full
 
-      # 3. Extract brucey.7z and locate the platformio.ini
+      # Extract and locate the project
       - name: Extract and locate source
         id: locate_source
         run: |
           mkdir extracted
           7z x brucey.7z -oextracted -y
           
-          # Find where platformio.ini is located inside the extracted folder
           PIO_DIR=$(find extracted -name "platformio.ini" -exec dirname {} \; | head -1)
           
           if [ -z "$PIO_DIR" ]; then
@@ -35,10 +32,20 @@ jobs:
             exit 1
           fi
           
-          echo "Found project root at: $PIO_DIR"
           echo "PROJECT_DIR=$PIO_DIR" >> $GITHUB_ENV
 
-      # 4. Cache PlatformIO to make future builds much faster
+      # FIX THE CASE SENSITIVITY ISSUE HERE
+      - name: Fix Explorer.h case sensitivity
+        run: |
+          cd $PROJECT_DIR
+          echo "Fixing include paths for Linux compatibility..."
+          find src -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/#include "Explorer\.h"/#include "explorer.h"/g' {} +
+          
+          # Ensure the file actually exists with the lowercase name
+          if [ -f "src/Explorer.h" ] && [ ! -f "src/explorer.h" ]; then
+            mv src/Explorer.h src/explorer.h
+          fi
+
       - name: Cache PlatformIO packages
         uses: actions/cache@v4
         with:
@@ -51,7 +58,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pio-
 
-      # 5. Setup Python and install PlatformIO
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -62,19 +68,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio esptool
 
-      # 6. Compile the code
       - name: Build firmware
         run: |
           cd $PROJECT_DIR
           pio run -e BRUCEY_S3_SSD1306
 
-      # 7. Merge bootloader, partitions, and firmware into one file
       - name: Create merged full-flash image
         run: |
           cd $PROJECT_DIR
           BUILD_DIR=".pio/build/BRUCEY_S3_SSD1306"
           
-          # Verify required files exist
           for f in bootloader.bin partitions.bin firmware.bin; do
             if [ ! -f "$BUILD_DIR/$f" ]; then
               echo "::error::Missing required file: $BUILD_DIR/$f"
@@ -82,10 +85,8 @@ jobs:
             fi
           done
 
-          # Find boot_app0.bin
           BOOT_APP0=$(find ~/.platformio/packages -name boot_app0.bin 2>/dev/null | head -1)
 
-          # Merge
           python -m esptool --chip esp32s3 merge_bin \
             --flash_mode dio \
             --flash_freq 80m \
@@ -96,7 +97,6 @@ jobs:
             0x10000 "$BUILD_DIR/firmware.bin" \
             -o      "$BUILD_DIR/merged_full_flash.bin"
 
-      # 8. Collect files for download
       - name: Collect artifacts
         run: |
           cd $PROJECT_DIR
@@ -108,10 +108,7 @@ jobs:
           cp "$BOOT_APP0"                           ../artifacts/boot_app0.bin
           cp "$BUILD_DIR/firmware.bin"              ../artifacts/
           cp "$BUILD_DIR/merged_full_flash.bin"     ../artifacts/
-          
-          ls -la ../artifacts/
 
-      # 9. Upload the ZIP so you can download it
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
