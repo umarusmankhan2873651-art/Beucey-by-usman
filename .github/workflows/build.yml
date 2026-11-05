@@ -18,7 +18,7 @@ jobs:
       - name: Install p7zip-full
         run: sudo apt-get update && sudo apt-get install -y p7zip-full
 
-      # Extract and locate the project
+      # 1. Extract and locate the project
       - name: Extract and locate source
         id: locate_source
         run: |
@@ -34,17 +34,30 @@ jobs:
           
           echo "PROJECT_DIR=$PIO_DIR" >> $GITHUB_ENV
 
-      # FIX THE CASE SENSITIVITY ISSUE HERE
+      # 2. Fix Linux Case-Sensitivity (Explorer.h)
       - name: Fix Explorer.h case sensitivity
         run: |
           cd $PROJECT_DIR
           echo "Fixing include paths for Linux compatibility..."
           find src -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/#include "Explorer\.h"/#include "explorer.h"/g' {} +
           
-          # Ensure the file actually exists with the lowercase name
           if [ -f "src/Explorer.h" ] && [ ! -f "src/explorer.h" ]; then
             mv src/Explorer.h src/explorer.h
           fi
+
+      # 3. Expand partition table to fit the 2.05MB code
+      - name: Expand partition table for larger firmware
+        run: |
+          cd $PROJECT_DIR
+          cat << 'EOF' > partitions_ota.csv
+          # Name,   Type, SubType, Offset,   Size,     Flags
+          nvs,      data, nvs,     0x9000,   0x5000,
+          otadata,  data, ota,     0xe000,   0x2000,
+          app0,     app,  ota_0,   0x10000,  0x300000,
+          app1,     app,  ota_1,   0x310000, 0x300000,
+          spiffs,   data, spiffs,  0x610000, 0x200000,
+          coredump, data, coredump,0x810000, 0x10000,
+          EOF
 
       - name: Cache PlatformIO packages
         uses: actions/cache@v4
@@ -68,11 +81,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio esptool
 
+      # 4. Compile
       - name: Build firmware
         run: |
           cd $PROJECT_DIR
           pio run -e BRUCEY_S3_SSD1306
 
+      # 5. Merge into single flashable image
       - name: Create merged full-flash image
         run: |
           cd $PROJECT_DIR
@@ -97,6 +112,7 @@ jobs:
             0x10000 "$BUILD_DIR/firmware.bin" \
             -o      "$BUILD_DIR/merged_full_flash.bin"
 
+      # 6. Collect artifacts
       - name: Collect artifacts
         run: |
           cd $PROJECT_DIR
